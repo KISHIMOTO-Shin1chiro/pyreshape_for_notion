@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyreshape_for_notion"
+version = "0.3.0"
+description = "AI サービスのチャットエクスポートを Notion インポート用 Markdown に変換するライブラリ"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "KISHIMOTO, S"},
+]
+keywords = ["notion", "chatgpt", "claude", "gemini", "markdown", "export"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pyreshape_for_notion*"]
+
+[project.urls]
+Homepage = "https://github.com/KISHIMOTO-Shin1chiro/pyreshape_for_notion"
+Repository = "https://github.com/KISHIMOTO-Shin1chiro/pyreshape_for_notion"
+Changelog = "https://github.com/KISHIMOTO-Shin1chiro/pyreshape_for_notion/blob/main/CHANGELOG.md"
+Issues = "https://github.com/KISHIMOTO-Shin1chiro/pyreshape_for_notion/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
