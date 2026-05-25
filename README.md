@@ -31,7 +31,7 @@ pyreshape\_for\_notion/
 GitHub で公開した場合、Colab のセルで次のように直接インストールできます。
 
 ```python
-!pip install git+https://github.com/KISHIMOTO-Shin1chiro/pyreshape\_for\_notion.git
+!pip install git+https://github.com/KISHIMOTO-Shin1chiro/pyreshape_for_notion.git
 ```
 
 開発中で Drive 上にソースを置いている場合は、editable install も可能です。
