@@ -2,6 +2,25 @@
 
 このプロジェクトの主要な変更点を記録します。バージョン番号は [セマンティック バージョニング](https://semver.org/lang/ja/) に従います。
 
+## [0.4.0] - 2026-05-28
+
+### 修正
+
+- Notion インポートが失敗するパターンを未然に防止するようになりました。具体的には、Claude のエクスポートに含まれる思考ブロック・ツール使用の痕跡 (`This block is not supported on your current device yet.` を含むコードフェンス) と、ブロック数式 (`$$...$$`) が原因で Notion のパーサーが文書構造を解釈できずインポート全体を拒否する問題に対処しました (pcp_017 で報告)。
+- 既定の挙動として、`conversation_to_notion_md` および `full_export` / `incremental_export` の出力に自動的にクリーニングが適用されます。既存ユーザは呼び出しコードを変更する必要はありません。
+
+### 追加
+
+- `core/notion_cleanup.py` モジュールを新設しました。Notion インポートを失敗させるノイズを除去・変換する純粋関数 `clean_for_notion(text)` を提供します。
+- `conversation_to_notion_md(..., notion_safe=True)` 引数を追加しました。既定で `True` (クリーニング有効)。デバッグや無加工出力が必要な場合は `False` にできます。
+- `core.clean_notion_md_folder(folder)` を追加しました。0.3.0 以前で生成済みの `2_notion_md` や `3_notion_md_split` 内のファイルを、後から一括修復できます。
+- 回帰テスト `tests/test_notion_cleanup.py` (9 件) を追加しました。
+
+### 既存の挙動への影響
+
+- 0.3.0 以前で生成した Markdown ファイルそのものは変わりません (再生成すれば新しい出力に切り替わります)。
+- pcp_017 の応急処置スクリプト `clean_md_for_notion.py` の機能は本モジュールに統合されました。今後は `from pyreshape_for_notion.core import clean_for_notion` を使ってください。
+
 ## [0.3.0] - 2026-05-25
 
 ### 変更 (破壊的)

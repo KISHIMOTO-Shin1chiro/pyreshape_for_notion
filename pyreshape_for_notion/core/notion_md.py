@@ -178,7 +178,18 @@ def conversation_to_notion_md(
     fallback_seq_start: int = 0,
     dedupe: bool = True,
     shift_body_headings: bool = False,
+    notion_safe: bool = True,
 ) -> str:
+    """
+    正規化済み会話を Notion 互換 Markdown 文字列に変換する。
+
+    引数:
+      notion_safe : True (既定) の場合、出力に Notion インポート向けの
+                    クリーニング (core.notion_cleanup.clean_for_notion) を
+                    適用する。"This block is not supported..." の除去、
+                    ブロック数式 $$...$$ の inline code 化、空行整理など。
+                    False にすると無加工で返す (デバッグ用途等)。
+    """
     msgs = conv.get("chat_messages", [])
     pcps = pair_into_pcps(msgs)
     if dedupe:
@@ -225,4 +236,12 @@ def conversation_to_notion_md(
         out.append("---")
         out.append("")
 
-    return "\n".join(out) + "\n"
+    md = "\n".join(out) + "\n"
+
+    if notion_safe:
+        # Notion インポートを失敗させるノイズを除去
+        # (循環 import 回避のため関数内 import)
+        from .notion_cleanup import clean_for_notion
+        md, _stats = clean_for_notion(md)
+
+    return md

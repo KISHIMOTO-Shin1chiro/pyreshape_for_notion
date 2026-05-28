@@ -270,3 +270,37 @@ def run_incremental_export(
     split_notion_md_files(lay.notion_md, lay.notion_md_split,
                           max_pcps_per_part=max_pcps_per_part)
     return result
+
+
+# ============================================================
+# 既存 md ファイルの Notion 向けクリーニング (0.4.0 追加)
+# ============================================================
+def clean_notion_md_folder(folder: str | Path) -> dict[str, Any]:
+    """
+    既に生成された .md ファイル群を、Notion インポート向けに後処理する。
+
+    0.4.0 以降の新規生成では conversation_to_notion_md が自動でクリーニング
+    するため不要だが、0.3.0 以前で生成した既存ファイルを修復する目的で使う。
+    対象フォルダ内のすべての .md を上書きクリーニングする。
+
+    返り値: {files, unsupported_removed, block_math_converted}
+    """
+    from . import drive_io
+    from .notion_cleanup import clean_for_notion
+
+    folder = Path(folder)
+    if not folder.exists():
+        raise FileNotFoundError(f"フォルダがありません: {folder}")
+
+    total = {"files": 0, "unsupported_removed": 0, "block_math_converted": 0}
+    for p in sorted(folder.iterdir()):
+        if p.suffix != ".md":
+            continue
+        text = p.read_text(encoding="utf-8")
+        cleaned, stats = clean_for_notion(text)
+        if cleaned != text:
+            p.write_text(cleaned, encoding="utf-8")
+        total["files"] += 1
+        total["unsupported_removed"] += stats["unsupported_removed"]
+        total["block_math_converted"] += stats["block_math_converted"]
+    return total

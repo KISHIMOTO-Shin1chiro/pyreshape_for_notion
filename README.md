@@ -2,7 +2,13 @@
 
 AI サービス (ChatGPT / Claude / Gemini) のチャットエクスポートを、Notion インポート用の Markdown に変換するための Python ライブラリです。Google Drive と Google Colab 上での利用を想定しています。
 
-現在のバージョン: 0.3.0 (変更点は [CHANGELOG.md](CHANGELOG.md) を参照)
+現在のバージョン: 0.4.0 (変更点は [CHANGELOG.md](CHANGELOG.md) を参照)
+
+## ライブラリ作成の動機
+
+私は、ChatGPT, Claude, Gemini の３種の Frontier AI Services について、主にブラウザ版を用いて調査研究をおこなってきました。これらを使い続けると、歳月が経つにつれ、莫大な量のテキストデータが各アカウント内に蓄積していきます。それらのデータマネジメント、データを利用したい場面でわかりやすく可視化されている状況をつくるためにどうすればよいかを考えた末、Notion への定期的なデータ移管が現状で最も有効であると結論付けました。Notion へのデータ移管を、当初は手動でやっていたのですが、とてつもない手間と時間がかかることに気づかされました。加えて、Notion が採用している Enhanced Markdown に則った文書の階層構造，TeX式，テーブル，コンピュータ言語によるコード類（Python, Mermaid, etc.）がそのまま保持されないことが多く、Notion 上でそれらを手動変更するのには限界があると悟りました。
+
+そこで、各 AI Services のエクスポートファイル（md, json）からNotion へのインポートファイル（zip）を自動作成する Pythonライブラリをつくろうと企図しました。
 
 ## 設計の考え方
 
@@ -15,6 +21,7 @@ pyreshape\_for\_notion/
 │   ├── drive\_io.py      ファイル入出力の抽象化
 │   ├── layout.py        出力フォルダ命名体系の一元定義
 │   ├── notion\_md.py     Notion MD 変換 (旧 Code\_003)
+│   ├── notion\_cleanup.py Notion インポート向けクリーニング (0.4.0 追加)
 │   ├── diff.py          差分検出 (旧 Code\_004 中核)
 │   ├── pcp\_split.py     pcp 単位分割 (旧 Code\_006)
 │   ├── zip\_batch.py     zip バッチ化 (旧 Code\_007/008)
@@ -31,7 +38,7 @@ pyreshape\_for\_notion/
 GitHub で公開した場合、Colab のセルで次のように直接インストールできます。
 
 ```python
-!pip install git+https://github.com/KISHIMOTO-Shin1chiro/pyreshape_for_notion.git
+!pip install git+https://github.com/KISHIMOTO-Shin1chiro/pyreshape\_for\_notion.git
 ```
 
 開発中で Drive 上にソースを置いている場合は、editable install も可能です。
@@ -150,9 +157,25 @@ print(lay.notion\_md)   # .../Log\_Gemini/v1/2\_notion\_md
 
 `shift\_body\_headings` (既定 False): 本文中の見出しレベルを 1 段繰り下げて pcp 見出しの下位に位置づけるか。既定では本文の見出しを原文のレベルのまま保持します。
 
+`notion\_safe` (既定 True, 0.4.0 で追加): Notion インポートを失敗させるパターン (Claude の思考ブロック痕跡、ブロック数式 `$$...$$`) を自動的に除去・変換します。既定で有効なので、通常は意識する必要はありません。
+
+## Notion インポートの互換性 (0.4.0)
+
+Claude のエクスポートには、思考ブロックやツール使用 (コード実行・ウェブ検索) の痕跡が `This block is not supported on your current device yet.` を含むコードフェンスとして書き出されています。これらが本文と入り組むと、コードフェンスの開閉境界がずれて Notion のパーサーが文書構造を解釈できず、インポート全体が失敗します。
+
+0.4.0 では、Notion MD 生成時に自動的にこれらのノイズを除去するクリーニングが入りました。新規生成では何も意識する必要はありません。
+
+過去 (0.3.0 以前) で生成済みの Markdown ファイルを後から修復したい場合は、次のように一括クリーニングできます。
+
+```python
+from pyreshape\_for\_notion.core import clean\_notion\_md\_folder
+stats = clean\_notion\_md\_folder(base\_dir / "3\_notion\_md\_split")
+print(stats)  # {'files': N, 'unsupported\_removed': X, 'block\_math\_converted': Y}
+```
+
 ## 出力される Markdown の構造
 
-各会話は次の構造の Markdown に変換されます (v0.2.0)。
+各会話は次の構造の Markdown に変換されます (v0.2.0 以降の見出しベース構造、v0.4.0 で Notion 向けクリーニング自動化)。
 
 ```markdown
 # 会話タイトル

@@ -42,6 +42,8 @@ from .zip_batch import (
 )
 from . import drive_io
 from . import layout
+from . import notion_cleanup
+from .notion_cleanup import clean_for_notion
 from .layout import DriveLayout
 from .pipeline import (
     save_split_json,
@@ -51,12 +53,14 @@ from .pipeline import (
     run_incremental_update,
     run_full_export,
     run_incremental_export,
+    clean_notion_md_folder,
 )
 
 __all__ = [
     "save_split_json", "save_notion_md", "split_notion_md_files",
     "make_zip_batches", "run_incremental_update",
     "run_full_export", "run_incremental_export",
+    "clean_notion_md_folder",
     "NormalizedConv", "NormalizedMessage",
     "make_message", "make_conversation",
     "extract_visible_text", "is_message_empty", "is_empty_chat",
@@ -69,4 +73,6 @@ __all__ = [
     "drive_io",
     "layout",
     "DriveLayout",
+    "notion_cleanup",
+    "clean_for_notion",
 ]
