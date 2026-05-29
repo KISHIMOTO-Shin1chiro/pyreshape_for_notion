@@ -43,7 +43,16 @@ from .zip_batch import (
 from . import drive_io
 from . import layout
 from . import notion_cleanup
+from . import filename
 from .notion_cleanup import clean_for_notion
+from .filename import (
+    sanitize_title,
+    build_readable_stem,
+    build_readable_filename,
+    rename_notion_md_files,
+    update_renamed_for_convs,
+    is_legacy_filename,
+)
 from .layout import DriveLayout
 from .pipeline import (
     save_split_json,
@@ -75,4 +84,11 @@ __all__ = [
     "DriveLayout",
     "notion_cleanup",
     "clean_for_notion",
+    "filename",
+    "sanitize_title",
+    "build_readable_stem",
+    "build_readable_filename",
+    "rename_notion_md_files",
+    "update_renamed_for_convs",
+    "is_legacy_filename",
 ]

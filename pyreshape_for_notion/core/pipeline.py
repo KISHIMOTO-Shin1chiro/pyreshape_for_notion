@@ -221,20 +221,47 @@ def run_full_export(
     skip_empty: bool = True,
 ) -> dict[str, Any]:
     """
-    初回投入ワークフロー一括実行 (プラットフォーム非依存):
-      parse → split JSON → Notion MD → pcp 分割 → zip バッチ化
+    初回投入ワークフロー一括実行 (プラットフォーム非依存)。
+
+    工程 (0.5.0):
+      0. parse                  : raw_export → 正規化会話のリスト
+      1. save_split_json        : → 1_split_json/
+      2. save_notion_md         : → 2_notion_md/         (UUID 系名)
+      3. rename_notion_md_files : → 3_notion_md_renamed/ + 6_report/CSV
+      4. split_notion_md_files  : → 4_notion_md_renamed_split/
+      5. make_zip_batches       : → 5_zip_batches/
 
     parser_fn: raw_export_dir を受け取り NormalizedConv のリストを返す関数。
                各プラットフォームの parse_folder を渡す。
     フォルダ構成は core.layout.DriveLayout に従う。
     """
+    from .filename import rename_notion_md_files
+
     lay = DriveLayout(base_dir)
 
+    # 工程 0: parse
     convs = parser_fn(Path(raw_export_dir))
+
+    # 工程 1: split JSON
     r_split = save_split_json(convs, lay.split_json, skip_empty=skip_empty)
+
+    # 工程 2: Notion MD (UUID 系名で 2_notion_md/ に保存)
     save_notion_md(convs, lay.notion_md, skip_empty=skip_empty)
-    split_notion_md_files(lay.notion_md, lay.notion_md_split,
+
+    # 工程 3: rename (3_notion_md_renamed/ にコピー + 6_report/CSV に対応表)
+    r_rename = rename_notion_md_files(
+        convs,
+        source_dir=lay.notion_md,
+        target_dir=lay.notion_md_renamed,
+        mapping_csv_path=lay.filename_mapping_csv,
+        skip_empty=skip_empty,
+    )
+
+    # 工程 4: pcp 単位分割 (3_notion_md_renamed → 4_notion_md_renamed_split)
+    split_notion_md_files(lay.notion_md_renamed, lay.notion_md_split,
                           max_pcps_per_part=max_pcps_per_part)
+
+    # 工程 5: zip バッチ化
     infos = make_zip_batches(lay.notion_md_split, lay.zip_batches,
                              target=target, overflow=overflow)
 
@@ -242,8 +269,10 @@ def run_full_export(
         "n_conversations": len(convs),
         "n_saved": len(r_split["saved"]),
         "n_skipped": len(r_split["skipped"]),
+        "n_renamed": len(r_rename["renamed"]),
         "n_zip_batches": len(infos),
         "zip_infos": infos,
+        "mapping_csv": str(r_rename["mapping_csv"]),
     }
 
 
@@ -255,20 +284,50 @@ def run_incremental_export(
     skip_empty: bool = True,
 ) -> dict[str, Any]:
     """
-    増分更新ワークフロー (プラットフォーム非依存):
-      parse → 差分検出 → NEW/UPDATED のみ split JSON + Notion MD 再生成
-      → pcp 分割
+    増分更新ワークフロー (プラットフォーム非依存)。
+
+    工程:
+      0. parse → 差分検出
+      1. NEW/UPDATED のみ 1_split_json/ と 2_notion_md/ を再生成
+      2. NEW/UPDATED のみ 3_notion_md_renamed/ を更新 + CSV 更新
+      3. 4_notion_md_renamed_split/ を全件分割し直し
+         (差分検出結果が反映されるよう)
+
     フォルダ構成は core.layout.DriveLayout に従う。
     """
+    from .filename import update_renamed_for_convs
+
     lay = DriveLayout(base_dir)
 
     convs = parser_fn(Path(raw_export_dir))
+
+    # 工程 1: split JSON + 2_notion_md の差分更新 + snapshot 更新
     result = run_incremental_update(
         convs, lay.split_json, lay.notion_md, lay.snapshot_path,
         skip_empty=skip_empty,
     )
-    split_notion_md_files(lay.notion_md, lay.notion_md_split,
+
+    # 工程 2: 3_notion_md_renamed の差分更新 + CSV 更新
+    # NEW と UPDATED の会話だけを rename し、旧名ファイルを除去
+    diff = result["diff"]
+    changed = diff["new"] + diff["updated"]
+    r_rename = update_renamed_for_convs(
+        changed_convs=changed,
+        all_convs=convs,
+        source_dir=lay.notion_md,
+        target_dir=lay.notion_md_renamed,
+        mapping_csv_path=lay.filename_mapping_csv,
+    )
+
+    # 工程 3: pcp 単位分割
+    # 既存の分割ファイルとの整合を保つため、変更があった会話の分割ファイルだけ
+    # 再生成するのが理想だが、ここではシンプルさのため全件再分割する。
+    # (3_notion_md_renamed の内容に整合する 4_notion_md_renamed_split を保証)
+    split_notion_md_files(lay.notion_md_renamed, lay.notion_md_split,
                           max_pcps_per_part=max_pcps_per_part)
+
+    result["n_renamed"] = len(r_rename["renamed"])
+    result["mapping_csv"] = str(r_rename["mapping_csv"])
     return result
 
 
