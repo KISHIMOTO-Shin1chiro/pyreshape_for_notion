@@ -4,6 +4,10 @@ AI サービス (ChatGPT / Claude / Gemini) のチャットエクスポートを
 
 現在のバージョン: 0.5.1 (変更点は [CHANGELOG.md](CHANGELOG.md) を参照)
 
+## ライブラリ作成の動機
+
+私は、ChatGPT, Claude, Gemini の３種の Frontier AI Services を、主に自身の調査研究に用いてきました。これらを使い続けていきますと、歳月が経つにつれ、莫大な量のテキストデータが各アカウント内に蓄積されていきます。それらのデータマネジメントを効率化し、データを利用したい場面でわかりやすく可視化されている状況をつくるためにどうすればよいかを考えた末、Notion への定期的なデータ移管が現状で最も有効であると結論付けました。Notion へのデータ移管を、当初は手動でやっていたのですが、とてつもない手間と時間がかかることに気づかされました。加えて、Notion が採用している Enhanced Markdown に則った文書の階層構造，TeX式，テーブル，コンピュータ言語によるコード類（Python, Mermaid, etc.）がそのまま保持されないことが多く、Notion 上でそれらを手動変更するのには限界があると悟りました。
+
 ## 設計の考え方
 
 これまで `Code_000` 〜 `Code_008` として個別のスクリプトで実装してきた処理を、import して関数として呼び出せるライブラリに再構成したものです。3 プラットフォームで共通するロジック (Notion MD 化、差分検出、pcp 分割、zip バッチ化) を `pyreshape_for_notion.core` に集約し、入力フォーマットの違いを吸収するパーサだけを `pyreshape_for_notion.chatgpt` / `pyreshape_for_notion.claude` / `pyreshape_for_notion.gemini` に分離しています。
