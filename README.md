@@ -2,7 +2,7 @@
 
 AI サービス (ChatGPT / Claude / Gemini) のチャットエクスポートを、Notion インポート用の Markdown に変換するための Python ライブラリです。Google Drive と Google Colab 上での利用を想定しています。
 
-現在のバージョン: 0.5.1 (変更点は [CHANGELOG.md](CHANGELOG.md) を参照)
+現在のバージョン: 0.5.2 (変更点は [CHANGELOG.md](CHANGELOG.md) を参照)
 
 ## 設計の考え方
 
