@@ -2,6 +2,27 @@
 
 このプロジェクトの主要な変更点を記録します。バージョン番号は [セマンティック バージョニング](https://semver.org/lang/ja/) に従います。
 
+## [0.5.1] - 2026-05-30
+
+### 修正
+
+- ChatGPT のツール使用 (旧 Code Interpreter / 検索など) を含む会話で、本来の最終回答が捨てられ、`search("...")` のようなツール呼び出しコードが回答として記録される問題を修正しました (pcp_022 で報告)。
+- 症状として「拡張推論が入ると以降のチャットが切れる」ように見えていましたが、原因は `pair_into_pcps` が「human の次に出現した assistant メッセージ」を無条件で pair の相手にしていたことでした。
+- 修正後は `render_kind == "text"` の assistant メッセージのみを pair の相手とし、間に挟まる `assistant(code)` (search/mclick 呼び出し) や `tool` (検索結果) はスキップします。本来の最終回答が正しく Notion MD に出力されるようになります。
+
+### 影響範囲
+
+- ChatGPT のツール使用を含む会話: 大幅に改善 (失われていた最終回答が復活)
+- Claude / Gemini の通常会話: 影響なし (両者の assistant は `render_kind="text"` のみ)
+
+### 追加
+
+- 回帰テスト `tests/test_pcp_022_tool_use_pairing.py` (7 件) を追加しました。
+
+### 既存ユーザの対応
+
+- 0.5.0 以前で `2_notion_md` / `3_notion_md_renamed` を生成済みの場合、ツール使用を含む ChatGPT の会話は誤った内容で保存されています。0.5.1 にアップグレード後、ChatGPT 側の `full_export` をもう一度実行することで、正しい内容に再生成されます。Claude / Gemini のフォルダは再生成不要です。
+
 ## [0.5.0] - 2026-05-29
 
 ### 修正

@@ -121,18 +121,45 @@ def shift_headings(text: str, floor_level: int = BODY_HEADING_FLOOR) -> str:
 def pair_into_pcps(
     msgs: list[NormalizedMessage],
 ) -> list[tuple[NormalizedMessage, NormalizedMessage | None]]:
+    """
+    human → 次に出現する assistant(text) メッセージのペアを抽出する。
+
+    pcp_022 修正: ChatGPT のツール使用 (旧 Code Interpreter / 検索) で発生する
+    パターン
+        human(質問) → assistant(code: search呼び出し) → tool(検索結果)
+        → ... → assistant(text: 最終回答) → human(次の質問)
+    に対し、間に挟まる assistant(code) と tool メッセージはスキップし、
+    本来の最終回答である assistant(text) を pair の相手とする。
+
+    判定:
+      - sender == "assistant" かつ render_kind == "text" を pair の相手とする
+      - sender == "tool" (検索結果等) は完全に無視
+      - sender == "assistant" でも render_kind == "code"/"exec_output"/
+        "search_result" などのツール呼び出し系はスキップ
+      - sender == "system" はスキップ
+
+    Claude/Gemini の挙動への影響: 両者のパーサは assistant メッセージを
+    すべて render_kind="text" で正規化するため、本変更による影響は無い。
+    """
     msgs_sorted = sorted(msgs, key=lambda m: m.get("index", 0))
     pcps: list[tuple[NormalizedMessage, NormalizedMessage | None]] = []
     pending: NormalizedMessage | None = None
+
     for m in msgs_sorted:
-        s = m.get("sender")
-        if s == "human":
+        sender = m.get("sender")
+        if sender == "human":
             if pending is not None:
                 pcps.append((pending, None))
             pending = m
-        elif s == "assistant" and pending is not None:
-            pcps.append((pending, m))
-            pending = None
+        elif sender == "assistant" and pending is not None:
+            # render_kind が "text" のものだけを pair の相手とする
+            # (code, exec_output, search_result, image_ref などはスキップ)
+            if m.get("render_kind", "text") == "text":
+                pcps.append((pending, m))
+                pending = None
+            # render_kind が text でない assistant はスキップ (検索呼び出し等)
+        # sender == "tool" / "system" は無視
+
     if pending is not None:
         pcps.append((pending, None))
     return pcps
