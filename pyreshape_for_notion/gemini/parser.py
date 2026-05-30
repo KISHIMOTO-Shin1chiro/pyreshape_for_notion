@@ -65,7 +65,17 @@ def _parse_date_prefix(date_str: str | None) -> str:
 
 
 def parse_gemini_md(text: str) -> dict[str, Any]:
-    """Gemini Chat Export 形式の MD をパース。"""
+    """
+    Gemini Chat Export 形式の MD をパース。
+
+    pcp_022_006 修正 (0.5.3): 本文中の `---` (水平線) を会話区切りと誤認
+    して Gemini 回答を分割していた問題に対処。
+    Gemini は回答内で `---` を構造区切り (## 検証 などの節の前) として
+    使うことがあるため、`---` の次に来る非空行が `## 👤 You` または
+    `## 🤖 Gemini` の場合のみ会話区切りとして扱う。それ以外は本文として保持。
+
+    この修正は Gemini パーサ内のみで完結し、ChatGPT / Claude には影響しない。
+    """
     lines = text.splitlines()
     state = "HEADER"
     exported_on: str | None = None
@@ -83,7 +93,21 @@ def parse_gemini_md(text: str) -> dict[str, Any]:
         current_sender = None
         current_lines = []
 
-    for line in lines:
+    def _is_conv_separator(idx: int) -> bool:
+        """
+        lines[idx] が `---` のとき、それが本当に会話区切りか判定する。
+        次に出現する非空行が ## 👤 You または ## 🤖 Gemini なら True。
+        次に非空行が無い (ファイル末尾の閉じ区切り) も True。
+        """
+        for j in range(idx + 1, len(lines)):
+            nxt = lines[j]
+            if not nxt.strip():
+                continue
+            return bool(USER_HEADER_RE.match(nxt) or GEMINI_HEADER_RE.match(nxt))
+        # 末尾まで非空行が見つからない場合: ファイル末尾の閉じ区切り → flush
+        return True
+
+    for i, line in enumerate(lines):
         is_fence_line = bool(FENCE_RE.match(line))
         if in_fence:
             if is_fence_line:
@@ -118,7 +142,13 @@ def parse_gemini_md(text: str) -> dict[str, Any]:
             current_sender = "assistant"
             continue
         if SEPARATOR_RE.match(line):
-            _flush()
+            # 会話区切りか本文中の水平線かを判定 (先読み)
+            if _is_conv_separator(i):
+                _flush()
+            else:
+                # 本文中の水平線として保持
+                if current_sender is not None:
+                    current_lines.append(line)
             continue
         if current_sender is not None:
             current_lines.append(line)
