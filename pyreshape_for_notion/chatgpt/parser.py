@@ -116,6 +116,102 @@ def _classify_message(msg: dict[str, Any]) -> dict[str, Any] | None:
             "text": text, "extra": extra}
 
 
+def _process_citation_markers(
+    text: str,
+    content_references: list[dict[str, Any]] | None,
+) -> str:
+    """
+    ChatGPT の引用マーカー (PUA 文字 \\ue200...\\ue201 で囲まれた cite トークン)
+    を本文から除去し、metadata.content_references にある全 URL を本文末尾に
+    「## このターンの参考文献」セクションとして列挙する。
+
+    背景 (pcp_022_007 〜 pcp_022_010):
+      ChatGPT のエクスポートには、UI レンダリング時にハイパーリンクへ変換される
+      予定の特殊マーカー (turn{X}{view|search|news}{N} を PUA 文字で囲んだもの)
+      が含まれており、pyreshape の出力では文字化けの原因になっていた。
+
+      マーカー id (turn{X}view0 等) と metadata.content_references の
+      (turn_index, ref_type, ref_index) の紐付けロジックは ChatGPT 内部仕様で
+      公開されておらず、また安定的に解明することも困難であった (pcp_022_009 で
+      順序対応・セット一致など複数の仮説を実証データで検証したが、いずれも
+      正確な対応が得られなかった)。
+
+      そこで pcp_022_010 では、紐付けは諦めるが情報は失わない X-1 方針を採用:
+        - 本文中のマーカーは番号付きリンクに置換せず、純粋に除去 (可読性確保)
+        - 当該メッセージの metadata.content_references にある全 URL を
+          本文末尾に「## このターンの参考文献」として列挙 (情報の保全)
+
+    引数:
+      text             : 本文 (assistant メッセージ)
+      content_references: msg.metadata.content_references
+
+    返り値:
+      クリーニング済み本文 (引用マーカー除去 + 参考文献セクション付加)
+    """
+    import re as _re
+
+    # 本文中のマーカーを除去 (PUA 文字を含む cite トークン全体)
+    # マーカー種別: 通常の web 引用 (\ue200cite\ue202turn{X}{type}{N}\ue201)
+    #              ファイル引用     (\ue200filecite\ue202turn{X}file{Y}\ue201)
+    # 「\ue200 で始まり \ue201 で終わる任意トークン」を一括除去するのが安全。
+    MARKER_RE = _re.compile(r'\ue200[^\ue200\ue201]*\ue201')
+    cleaned = MARKER_RE.sub("", text or "")
+    # 残った PUA 文字 (E200-E202) の念のための除去
+    cleaned = _re.sub(r'[\ue200-\ue202]', '', cleaned)
+
+    # content_references の全 URL を重複排除しながら列挙
+    if not content_references:
+        return cleaned
+
+    seen_urls: set[str] = set()
+    refs_in_order: list[dict[str, str]] = []
+    for r in content_references:
+        items = r.get("items") or []
+        for it in items:
+            url = it.get("url") or ""
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            refs_in_order.append({
+                "url": url,
+                "title": it.get("title") or "",
+                "attribution": it.get("attribution") or "",
+            })
+
+    if not refs_in_order:
+        return cleaned
+
+    # 末尾に参考文献セクションを付加
+    lines = ["", "", "## このターンの参考文献", ""]
+    for i, r in enumerate(refs_in_order, 1):
+        title = (r["title"] or "").strip()
+        attr = (r["attribution"] or "").strip()
+        url = r["url"]
+        # title が URL 文字列そのもの (ChatGPT 側でタイトル取得失敗時) は
+        # 表示として使わない
+        title_is_url = title.startswith("http://") or title.startswith("https://")
+        if title and not title_is_url:
+            display = title
+            attr_part = f" ({attr})" if attr and attr != title else ""
+        elif attr:
+            display = attr
+            attr_part = ""
+        else:
+            # URL からホスト名を抽出
+            host = url
+            for prefix in ("https://", "http://"):
+                if host.startswith(prefix):
+                    host = host[len(prefix):]
+                    break
+            host = host.split("/")[0]
+            display = host or "(no title)"
+            attr_part = ""
+        lines.append(f"{i}. [{display}]({url}){attr_part}")
+    section = "\n".join(lines)
+
+    return cleaned.rstrip() + section
+
+
 def _merge_consecutive_assistant_texts(
     nodes: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -212,13 +308,25 @@ def normalize_conv(raw: dict[str, Any]) -> NormalizedConv:
         else:
             sender = "system"
 
+        # pcp_022_010 (ChatGPT 固有, 0.5.4): assistant の text メッセージで
+        # PUA 文字を含む引用マーカーを除去し、metadata.content_references の
+        # 全 URL を本文末尾に「## このターンの参考文献」として列挙する。
+        # 本文中マーカーと URL の正確な紐付けは ChatGPT 内部仕様非公開のため
+        # 諦め (pcp_022_009 参照), マーカー除去 + 全 URL 保持の方針を採用。
+        text = classified["text"]
+        if (sender == "assistant"
+                and classified["render_kind"] == "text"
+                and "\ue200" in text):
+            content_refs = (msg.get("metadata") or {}).get("content_references")
+            text = _process_citation_markers(text, content_refs)
+
         ts = msg.get("create_time")
         nodes.append({
             "uuid": msg.get("id") or node_id,
             "sender": sender,
             "raw_role": role,
             "render_kind": classified["render_kind"],
-            "text": classified["text"],
+            "text": text,
             "extra": classified["extra"],
             "created_at": _ts_to_iso(ts),
             "updated_at": _ts_to_iso(msg.get("update_time") or ts),
