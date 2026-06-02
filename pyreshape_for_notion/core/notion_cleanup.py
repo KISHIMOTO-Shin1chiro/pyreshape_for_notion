@@ -134,7 +134,7 @@ def _ensure_blank_around_hr(text: str) -> str:
 def clean_for_notion(
     text: str,
     remove_unsupported: bool = True,
-    convert_block_math: bool = True,
+    convert_block_math: bool = False,
     normalize_blanks: bool = True,
 ) -> tuple[str, CleanupStats]:
     """
@@ -144,6 +144,10 @@ def clean_for_notion(
       text                : 入力 Markdown
       remove_unsupported  : True なら "This block is not supported..." を除去
       convert_block_math  : True なら $$...$$ を inline code `...` に変換
+                            (pcp_022_012 / 0.5.5 で既定を False に変更:
+                             現在の Notion は $$...$$ をブロック数式として
+                             正しく認識するため、変換すると逆に数式表示を
+                             壊してしまう。旧挙動が必要な場合のみ True に。)
       normalize_blanks    : True なら連続空行の圧縮と水平線周辺の空行確保を行う
 
     返り値:

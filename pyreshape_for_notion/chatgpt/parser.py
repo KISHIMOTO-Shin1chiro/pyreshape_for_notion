@@ -212,6 +212,76 @@ def _process_citation_markers(
     return cleaned.rstrip() + section
 
 
+def _normalize_tex_delimiters(text: str) -> str:
+    """
+    ChatGPT 出力に含まれる LaTeX 標準デリミタ ``\\(...\\)`` と ``\\[...\\]`` を、
+    Notion (KaTeX) が認識する ``$...$`` と ``$$...$$`` に置換する。
+    あわせて、ChatGPT が同じ数式を二重出力する ``\\`\\`\\`tex`` および
+    ``\\`\\`\\`latex`` のフェンスコードブロックを除去する
+    (直前の ``$$...$$`` と重複するため。pcp_022_012 で「案 Y」採用)。
+
+    背景 (pcp_022_011 〜 pcp_022_012):
+      ChatGPT は数式を次のような二重表現で出力する:
+          \\[
+          \\mathcal{B}_t = \\langle ... \\rangle
+          \\]
+
+          ``` tex id="..."
+          \\[
+          \\mathcal{B}_t = \\langle ... \\rangle
+          \\]
+          ```
+      Notion の Markdown インポートは ``\\(...\\)`` ``\\[...\\]`` を数式として
+      認識しないため、最初のブロックは記号が削られた壊れた表示になり、
+      2 番目のフェンスはコードブロックとして「TeX ソースが見えるだけ」の
+      状態になる。これにより全体として読みにくい結果になっていた。
+
+      0.5.5 では次の方針で対処する:
+        1. ``\\[...\\]`` → ``$$...$$`` に変換 (Notion がブロック数式として認識)
+        2. ``\\(...\\)`` → ``$...$``   に変換 (Notion がインライン数式として認識)
+        3. ``\\`\\`\\`tex`` / ``\\`\\`\\`latex`` フェンスは丸ごと除去
+           (直前の数式と内容が重複するため)
+
+    注意:
+      - コードフェンス内の本来のコード (```` ```python ```` 等) には触れない
+      - ``$`` や ``$$`` は Notion で数式として解釈されるため、本文中に金額表記
+        などで ``$`` を含む場合は影響を受け得るが、ChatGPT の数式デリミタ変換
+        が目的のため副作用は許容する (もし問題化したらコードブロック単位の
+        マスキングを追加する)
+    """
+    import re as _re
+
+    if not text:
+        return text
+
+    # まず ```tex / ```latex フェンスを丸ごと除去
+    # フェンス内容を含む `` ``` `` 開始から `` ``` `` 終了までを削除
+    text = _re.sub(
+        r'```(?:tex|latex)(?:\s+[^\n]*)?\n.*?\n```\s*\n?',
+        '',
+        text,
+        flags=_re.DOTALL | _re.IGNORECASE,
+    )
+
+    # 次に LaTeX デリミタを変換
+    # ``\[ ... \]`` → ``$$ ... $$`` (ブロック数式, DOTALL で改行含めて捕捉)
+    text = _re.sub(
+        r'\\\[(.+?)\\\]',
+        lambda m: '$$' + m.group(1) + '$$',
+        text,
+        flags=_re.DOTALL,
+    )
+
+    # ``\( ... \)`` → ``$ ... $`` (インライン数式, 改行はまたがない)
+    text = _re.sub(
+        r'\\\(([^\n]+?)\\\)',
+        lambda m: '$' + m.group(1) + '$',
+        text,
+    )
+
+    return text
+
+
 def _merge_consecutive_assistant_texts(
     nodes: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -319,6 +389,13 @@ def normalize_conv(raw: dict[str, Any]) -> NormalizedConv:
                 and "\ue200" in text):
             content_refs = (msg.get("metadata") or {}).get("content_references")
             text = _process_citation_markers(text, content_refs)
+
+        # pcp_022_012 (ChatGPT 固有, 0.5.5): assistant の text メッセージに
+        # 含まれる LaTeX 標準デリミタ (\(...\), \[...\]) を Notion (KaTeX)
+        # 互換の $...$, $$...$$ に変換し、ChatGPT が二重出力する
+        # ```tex / ```latex フェンスを除去する。
+        if sender == "assistant" and classified["render_kind"] == "text":
+            text = _normalize_tex_delimiters(text)
 
         ts = msg.get("create_time")
         nodes.append({
