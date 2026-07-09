@@ -2,6 +2,30 @@
 
 このプロジェクトの主要な変更点を記録します。バージョン番号は [セマンティック バージョニング](https://semver.org/lang/ja/) に従います。
 
+## [0.7.0] - 2026-07-09
+
+### 追加 (pcp_005)
+
+- `artifact.upload_markdown` / `artifact.upload_folder` / `artifact.NotionClient` を追加しました。md を Notion API 経由でページ化し、数式を **equation ブロック / equation リッチテキストとしてインポート時点からレンダリングされる形**で取り込みます。
+- 背景: Notion の「Import → Text & Markdown」は `$...$` / `$$...$$` を数式として解釈しません。0.6.0 の md → md 経路 (数式のコード退避) は内容を保全しますが、レンダリングは原理的に不可能です。レンダリングまで求める場合は md インポータを迂回して API でブロックを構成する必要があり、0.6.0 では変換器 (`markdown_to_blocks`) まで提供していました。0.7.0 はその上にアップロード層を載せ、ワンストップにしたものです。
+
+### 実装
+
+- 依存は標準ライブラリのみ (urllib)。`requests` も公式 SDK も不要で、Colab で追加インストールなしに動きます。
+- `parent_page_id` には Notion のページ URL をそのまま貼れます (`normalize_page_id` が URL / 32 桁 hex / UUID を吸収)。
+- children 100 ブロック制限に合わせた自動分割、平均 3 req/s のレート制限に合わせた送信間隔 (既定 0.34 s)、429/5xx への指数バックオフ再試行 (Retry-After 尊重) を実装しています。
+- 401 (token 不正) と 404 (integration 未共有) には、原因と対処を日本語で添えた例外を送出します。
+- `upload_folder` は `*_notion.md` (md インポート用の退避版) を既定で除外します。API 経路では原本を送るのが正であるためです。ただし退避版を誤って送っても、`markdown_to_blocks` の `restore_coded_math` により数式へ復元されます (テストで担保)。
+
+### テスト
+
+- `tests/test_pcp_005_uploader.py` (18 件) を追加しました。transport 差し替えによるモックで、分割送信・リトライ・id 正規化・エラーヒント・経路 1 出力の復元アップロードを検証します。実 API との疎通はネットワーク制約上未検証のため、API 契約は Notion 公式ドキュメント (2022-06-28 版) に依拠しています。
+
+### 使用前の準備 (一度だけ)
+
+1. https://www.notion.so/my-integrations で Internal Integration を作成し、secret (token) を取得します。
+2. アップロード先の親ページで … → 接続 (Connections) → 作成した integration を追加します。これを忘れると 404 になります。
+
 ## [0.6.0] - 2026-07-09
 
 ### 追加

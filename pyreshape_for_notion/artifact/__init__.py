@@ -34,6 +34,13 @@ from .md_rewrite import (
     convert_file,
     convert_folder,
 )
+from .uploader import (
+    NotionClient,
+    NotionAPIError,
+    upload_markdown,
+    upload_folder,
+    normalize_page_id,
+)
 from .notion_blocks import (
     markdown_to_blocks,
     make_page_payload,
@@ -47,4 +54,6 @@ __all__ = [
     "RewriteStats", "rewrite_for_notion", "convert_file", "convert_folder",
     "markdown_to_blocks", "make_page_payload", "chunk_blocks", "extract_title",
     "MAX_RICH_TEXT", "MAX_CHILDREN",
+    "NotionClient", "NotionAPIError",
+    "upload_markdown", "upload_folder", "normalize_page_id",
 ]

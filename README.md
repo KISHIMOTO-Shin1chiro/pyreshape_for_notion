@@ -51,7 +51,8 @@ pyreshape_for_notion/
 │   └── pipeline.py      High-level entry points
 ├── artifact/            Standalone Claude Artifact (.md) -> Notion
 │   ├── md_rewrite.py    md -> Notion-import-safe md
-│   └── notion_blocks.py md -> Notion API block objects (real equations)
+│   ├── notion_blocks.py md -> Notion API block objects (real equations)
+│   └── uploader.py      Direct upload via the Notion API (v0.7.0)
 ├── chatgpt/             ChatGPT-specific parser
 ├── claude/              Claude-specific parser
 └── gemini/              Gemini-specific parser
@@ -248,13 +249,27 @@ payload = artifact.make_page_payload(PARENT_PAGE_ID, artifact.extract_title(text
 Documents processed through route 1 are restored to real equations by route 2
 (`restore_coded_math=True`, the default).
 
+**Route 3 — upload directly (v0.7.0)**. One-stop version of route 2: reads the md,
+builds the blocks, and uploads via the Notion API. Standard library only.
+
+```python
+from pyreshape_for_notion.artifact import upload_markdown
+url = upload_markdown("paper.md",
+                      parent_page_id="https://www.notion.so/My-Page-24c3...",  # page URL as-is
+                      token="ntn_...")                                          # integration secret
+```
+
+One-time setup: create an internal integration at notion.so/my-integrations,
+then add it to the parent page via ... → Connections.
+
+
 ## License
 
 MIT License. See `LICENSE`.
 
 ## Version
 
-Current version: 0.6.0. See `CHANGELOG.md` for the full history.
+Current version: 0.7.0. See `CHANGELOG.md` for the full history.
 
 ---
 
@@ -315,7 +330,8 @@ pyreshape_for_notion/
 │   └── pipeline.py      高レベル API のエントリポイント
 ├── artifact/            単体の Claude Artifact (.md) を Notion へ
 │   ├── md_rewrite.py    md → Notion インポート安全な md
-│   └── notion_blocks.py md → Notion API ブロック (数式を実レンダリング)
+│   ├── notion_blocks.py md → Notion API ブロック (数式を実レンダリング)
+│   └── uploader.py      Notion API へ直接アップロード (v0.7.0)
 ├── chatgpt/             ChatGPT 専用パーサ
 ├── claude/              Claude 専用パーサ
 └── gemini/              Gemini 専用パーサ
@@ -538,10 +554,25 @@ for chunk in artifact.chunk_blocks(blocks[artifact.MAX_CHILDREN:]):
 
 経路 1 で退避した md も、`restore_coded_math=True` (既定) により数式へ復元されます。
 
+**経路 3 — 直接アップロード (v0.7.0)**。経路 2 のワンストップ版です。md を読み、
+ブロックを構成し、Notion API でアップロードするところまでを一つの関数で行います。
+依存は標準ライブラリのみです。
+
+```python
+from pyreshape_for_notion.artifact import upload_markdown
+url = upload_markdown("paper.md",
+                      parent_page_id="https://www.notion.so/My-Page-24c3...",  # ページ URL のままで可
+                      token="ntn_...")                                          # integration secret
+```
+
+一度だけの準備: notion.so/my-integrations で Internal Integration を作成し、
+親ページの … → 接続 (Connections) に追加してください。
+
+
 ## ライセンス
 
 MIT License。`LICENSE` ファイルをご覧ください。
 
 ## バージョン
 
-現在のバージョン: 0.6.0。完全な変更履歴は `CHANGELOG.md` をご覧ください。
+現在のバージョン: 0.7.0。完全な変更履歴は `CHANGELOG.md` をご覧ください。

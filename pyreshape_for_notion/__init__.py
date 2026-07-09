@@ -31,7 +31,7 @@ Google Drive / Google Colab 上での利用を想定。
 
 from __future__ import annotations
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 from . import core
 from . import chatgpt
