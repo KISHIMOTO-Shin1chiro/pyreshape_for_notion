@@ -43,6 +43,7 @@ from .zip_batch import (
 from . import drive_io
 from . import layout
 from . import notion_cleanup
+from . import mathsafe
 from . import filename
 from .notion_cleanup import clean_for_notion
 from .filename import (
@@ -83,6 +84,7 @@ __all__ = [
     "layout",
     "DriveLayout",
     "notion_cleanup",
+    "mathsafe",
     "clean_for_notion",
     "filename",
     "sanitize_title",

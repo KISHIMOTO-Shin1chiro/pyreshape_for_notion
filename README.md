@@ -43,11 +43,15 @@ pyreshape_for_notion/
 │   ├── layout.py        DriveLayout: folder naming scheme
 │   ├── notion_md.py     Notion-Markdown generation
 │   ├── notion_cleanup.py Notion-import-safe text cleanup
+│   ├── mathsafe.py      Math/code-aware Markdown segment scanner
 │   ├── filename.py      Readable filename rename + mapping CSV
 │   ├── diff.py          Diff detection for incremental updates
 │   ├── pcp_split.py     pcp-unit splitting of long Markdown files
 │   ├── zip_batch.py     Bundling renamed Markdown into zip batches
 │   └── pipeline.py      High-level entry points
+├── artifact/            Standalone Claude Artifact (.md) -> Notion
+│   ├── md_rewrite.py    md -> Notion-import-safe md
+│   └── notion_blocks.py md -> Notion API block objects (real equations)
 ├── chatgpt/             ChatGPT-specific parser
 ├── claude/              Claude-specific parser
 └── gemini/              Gemini-specific parser
@@ -214,13 +218,43 @@ pytest
 
 The test suite covers normalization for each platform, Notion-Markdown generation, the readable-filename rename stage, citation-marker stripping, LaTeX delimiter conversion, and the regression cases that drove the v0.5.x bug-fix series.
 
+## Claude Artifacts to Notion (v0.6.0 onward)
+
+For a standalone Markdown document written by Claude as an Artifact — a paper draft
+full of LaTeX, for instance — rather than a chat export, use the `artifact` subpackage.
+
+Notion's Markdown importer does not reliably interpret `$...$` / `$$...$$`. Math spans
+can surface in the body as the literal string `$true$`: the delimiters survive, the LaTeX
+inside them does not. Two routes are provided to avoid this.
+
+**Route 1 — md to md** (for `Import → Text & Markdown`). Math is moved into code regions,
+which the importer never parses. Nothing renders, but no LaTeX is lost.
+
+```python
+from pyreshape_for_notion import artifact
+dst, stats = artifact.convert_file("paper.md")
+```
+
+**Route 2 — md to Notion API blocks** (when you want the math rendered). Bypasses the
+Markdown importer: `$$...$$` becomes an `equation` block, `$...$` an `equation` rich text.
+No external dependencies; plain dicts are returned.
+
+```python
+blocks  = artifact.markdown_to_blocks(text, skip_first_h1=True)
+payload = artifact.make_page_payload(PARENT_PAGE_ID, artifact.extract_title(text), blocks)
+# POST /v1/pages, then PATCH the remainder via artifact.chunk_blocks(blocks[100:])
+```
+
+Documents processed through route 1 are restored to real equations by route 2
+(`restore_coded_math=True`, the default).
+
 ## License
 
 MIT License. See `LICENSE`.
 
 ## Version
 
-Current version: 0.5.5. See `CHANGELOG.md` for the full history.
+Current version: 0.6.0. See `CHANGELOG.md` for the full history.
 
 ---
 
@@ -273,11 +307,15 @@ pyreshape_for_notion/
 │   ├── layout.py        DriveLayout: フォルダ命名体系の定義
 │   ├── notion_md.py     Notion 用 Markdown 生成
 │   ├── notion_cleanup.py Notion インポート向けクリーニング
+│   ├── mathsafe.py      数式・コードを保護する Markdown セグメント走査
 │   ├── filename.py      可読ファイル名 rename と対応表 CSV 出力
 │   ├── diff.py          差分検出 (増分更新用)
 │   ├── pcp_split.py     長い Markdown を pcp 単位で分割
 │   ├── zip_batch.py     rename 後 Markdown を zip バッチに束ねる
 │   └── pipeline.py      高レベル API のエントリポイント
+├── artifact/            単体の Claude Artifact (.md) を Notion へ
+│   ├── md_rewrite.py    md → Notion インポート安全な md
+│   └── notion_blocks.py md → Notion API ブロック (数式を実レンダリング)
 ├── chatgpt/             ChatGPT 専用パーサ
 ├── claude/              Claude 専用パーサ
 └── gemini/              Gemini 専用パーサ
@@ -444,10 +482,66 @@ pytest
 
 テストスイートは、各プラットフォームの正規化、Notion 用 Markdown 生成、可読ファイル名への rename 工程、引用マーカー除去、LaTeX デリミタ変換、v0.5.x 系のバグ修正シリーズで作成された各リグレッションケースをカバーしています。
 
+## Claude Artifacts の md を Notion へ (0.6.0 以降)
+
+チャットのエクスポートではなく、Claude が Artifact として書き出した **単体の Markdown 文書**
+(数式を多く含む論文原稿など) を Notion に取り込む場合は `artifact` サブパッケージを使います。
+
+Notion の Markdown インポータは `$...$` / `$$...$$` を安定に解釈せず、数式スパンが本文中に
+`$true$` という文字列として現れることがあります。デリミタは残り、中身の LaTeX だけが失われます。
+これを避けるために二つの経路を用意しています。
+
+### 経路 1: md → md (Import → Text & Markdown 用)
+
+数式をコード領域へ退避します。レンダリングはされませんが、LaTeX ソースは一字も失われません。
+
+```python
+from pyreshape_for_notion import artifact
+
+dst, stats = artifact.convert_file("CBM_axiomatic_system_syntactic_subsystem_v0_1_3.md")
+print(stats.as_dict())
+# {'math_inline': 270, 'math_block': 16, 'latex_delims_normalized': 0,
+#  'headings_demoted': 0, 'unsupported_removed': 0, 'table_pipes_escaped': 0}
+```
+
+- インライン数式 `$x$` → `` `$x$` `` (インラインコード)
+- ブロック数式 `$$...$$` → ```` ```latex ```` フェンス
+- `\(...\)` `\[...\]` も同様に吸収します
+- `math_mode="keep"` で数式をそのまま残せます (経路 2 の前処理用)
+
+### 経路 2: md → Notion API ブロック (数式をレンダリングしたい場合)
+
+md インポータを迂回し、`equation` ブロック / `equation` リッチテキストを直接構成します。
+外部依存はありません。返り値は素の dict なので、`requests` でも公式 SDK でも送信できます。
+
+```python
+import requests
+from pyreshape_for_notion import artifact
+
+text   = open("CBM_axiomatic_system_syntactic_subsystem_v0_1_3.md", encoding="utf-8").read()
+blocks = artifact.markdown_to_blocks(text, skip_first_h1=True)
+title  = artifact.extract_title(text)
+
+headers = {"Authorization": f"Bearer {TOKEN}",
+           "Notion-Version": "2022-06-28",
+           "Content-Type": "application/json"}
+
+res  = requests.post("https://api.notion.com/v1/pages",
+                     json=artifact.make_page_payload(PARENT_PAGE_ID, title, blocks),
+                     headers=headers)
+page = res.json()["id"]
+
+for chunk in artifact.chunk_blocks(blocks[artifact.MAX_CHILDREN:]):
+    requests.patch(f"https://api.notion.com/v1/blocks/{page}/children",
+                   json={"children": chunk}, headers=headers)
+```
+
+経路 1 で退避した md も、`restore_coded_math=True` (既定) により数式へ復元されます。
+
 ## ライセンス
 
 MIT License。`LICENSE` ファイルをご覧ください。
 
 ## バージョン
 
-現在のバージョン: 0.5.5。完全な変更履歴は `CHANGELOG.md` をご覧ください。
+現在のバージョン: 0.6.0。完全な変更履歴は `CHANGELOG.md` をご覧ください。

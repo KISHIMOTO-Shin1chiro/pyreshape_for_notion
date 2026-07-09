@@ -31,11 +31,12 @@ Google Drive / Google Colab 上での利用を想定。
 
 from __future__ import annotations
 
-__version__ = "0.5.5"
+__version__ = "0.6.0"
 
 from . import core
 from . import chatgpt
 from . import claude
 from . import gemini
+from . import artifact
 
-__all__ = ["core", "chatgpt", "claude", "gemini", "__version__"]
+__all__ = ["core", "chatgpt", "claude", "gemini", "artifact", "__version__"]
